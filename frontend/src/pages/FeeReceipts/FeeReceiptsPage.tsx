@@ -326,7 +326,99 @@ export const FeeReceiptsPage: React.FC = () => {
   };
 
   const handlePrint = () => {
-    window.print();
+    const printEl = document.getElementById('printable-receipt');
+    if (!printEl) {
+      window.print();
+      return;
+    }
+
+    const iframe = document.createElement('iframe');
+    iframe.style.position = 'fixed';
+    iframe.style.right = '0';
+    iframe.style.bottom = '0';
+    iframe.style.width = '0';
+    iframe.style.height = '0';
+    iframe.style.border = '0';
+    iframe.style.visibility = 'hidden';
+    document.body.appendChild(iframe);
+
+    const doc = iframe.contentWindow?.document;
+    if (!doc) {
+      window.print();
+      return;
+    }
+
+    const styles = Array.from(document.querySelectorAll('link[rel="stylesheet"], style'))
+      .map((el) => el.outerHTML)
+      .join('\n');
+
+    doc.open();
+    doc.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="UTF-8">
+          <title>Receipt_${receiptEditState.receiptNo || selectedReceipt?.receipt_no || 'Receipt'}</title>
+          ${styles}
+          <style>
+            @page {
+              size: A4 portrait;
+              margin: 0mm;
+            }
+            html, body {
+              margin: 0 !important;
+              padding: 0 !important;
+              width: 210mm !important;
+              height: 297mm !important;
+              max-height: 297mm !important;
+              background: #ffffff !important;
+              overflow: hidden !important;
+              -webkit-print-color-adjust: exact !important;
+              print-color-adjust: exact !important;
+            }
+            .a4-print-canvas {
+              width: 210mm;
+              height: 297mm;
+              max-height: 297mm;
+              margin: 0 auto;
+              box-sizing: border-box;
+              display: flex;
+              justify-content: center;
+              align-items: flex-start;
+              padding-top: 10mm;
+              page-break-inside: avoid !important;
+              page-break-after: avoid !important;
+              page-break-before: avoid !important;
+              overflow: hidden !important;
+            }
+            #printable-receipt {
+              box-shadow: none !important;
+              border: none !important;
+              page-break-inside: avoid !important;
+              page-break-after: avoid !important;
+              break-inside: avoid !important;
+              break-after: avoid !important;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="a4-print-canvas">
+            ${printEl.outerHTML}
+          </div>
+        </body>
+      </html>
+    `);
+    doc.close();
+
+    setTimeout(() => {
+      iframe.contentWindow?.focus();
+      iframe.contentWindow?.print();
+      setTimeout(() => {
+        try {
+          document.body.removeChild(iframe);
+        } catch (e) {}
+      }, 2000);
+    }, 350);
   };
 
   const formatDateDMY = (dateStr?: string | null): string => {

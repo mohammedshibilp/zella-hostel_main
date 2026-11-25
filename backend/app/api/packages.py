@@ -53,3 +53,17 @@ def update_package(
     db.commit()
     db.refresh(pkg)
     return pkg
+
+
+@router.delete("/{pkg_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_package(
+    pkg_id: int,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin)
+):
+    pkg = db.query(Package).filter(Package.id == pkg_id).first()
+    if not pkg:
+        raise HTTPException(status_code=404, detail="Package not found")
+    db.delete(pkg)
+    db.commit()
+    return None

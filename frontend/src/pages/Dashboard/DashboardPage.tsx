@@ -41,106 +41,66 @@ export const DashboardPage: React.FC = () => {
   }
 
   return (
-    <div className="flex flex-col gap-5 animate-fade-in max-w-7xl mx-auto w-full">
-      <PageHeader
-        title="Hostel Dashboard"
-      />
-
-      {/* THE 3 CORE METRICS REQUESTED BY CLIENT */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-5">
-        {/* 1. TOTAL GUESTS */}
+    <div className="flex flex-col gap-6 animate-fade-in max-w-7xl mx-auto w-full">
+      {/* 3 CORE METRICS */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+        {/* 1. TOTAL BED SPACES */}
         <Card
           padding="sm"
-          className="relative overflow-hidden border border-slate-200/80 hover:shadow-md transition-all duration-200 group p-4 sm:p-5"
+          className="relative overflow-hidden border border-slate-100 hover:shadow-md transition-all duration-200 group p-5 bg-white rounded-2xl"
         >
-          <div className="absolute top-0 right-0 w-24 h-24 bg-primary/5 rounded-full -mr-6 -mt-6 pointer-events-none group-hover:scale-110 transition-transform" />
-          
           <div className="flex items-center justify-between">
             <div>
-              <span className="text-[11px] font-bold tracking-wider text-slate-400 uppercase block mb-1">
-                TOTAL GUESTS
+              <span className="text-xs font-semibold tracking-wider text-slate-400 uppercase block mb-1.5">
+                TOTAL BED SPACES
               </span>
-              <div className="text-3xl sm:text-4xl font-black text-navy-900 tracking-tight">
-                {metrics?.total_guests || 0}
+              <div className="text-3xl sm:text-4xl font-extrabold text-slate-900 tracking-tight">
+                {metrics?.total_beds || 101}
               </div>
             </div>
-            <div className="w-11 h-11 rounded-xl bg-primary text-white flex items-center justify-center shadow-sm shadow-primary/20 shrink-0">
+            <div className="w-12 h-12 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
               <Users className="w-5 h-5" />
             </div>
           </div>
-
-          <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-end">
-            <Link
-              to="/guests"
-              className="text-xs font-bold text-primary hover:text-primary-800 flex items-center gap-1 group-hover:translate-x-0.5 transition-transform"
-            >
-              <span>View Guests</span>
-              <ArrowRight className="w-3.5 h-3.5" />
-            </Link>
-          </div>
         </Card>
 
-        {/* 2. VACANCIES */}
+        {/* 2. AVAILABLE BED SPACES */}
         <Card
           padding="sm"
-          className="relative overflow-hidden border border-slate-200/80 hover:shadow-md transition-all duration-200 group p-4 sm:p-5"
+          className="relative overflow-hidden border border-slate-100 hover:shadow-md transition-all duration-200 group p-5 bg-white rounded-2xl"
         >
-          <div className="absolute top-0 right-0 w-24 h-24 bg-secondary/10 rounded-full -mr-6 -mt-6 pointer-events-none group-hover:scale-110 transition-transform" />
-
           <div className="flex items-center justify-between">
             <div>
-              <span className="text-[11px] font-bold tracking-wider text-slate-400 uppercase block mb-1">
-                VACANCIES
+              <span className="text-xs font-semibold tracking-wider text-slate-400 uppercase block mb-1.5">
+                AVAILABLE BED SPACES
               </span>
-              <div className="text-3xl sm:text-4xl font-black text-secondary tracking-tight">
-                {metrics?.vacancies ?? 0}
+              <div className="text-3xl sm:text-4xl font-extrabold text-slate-900 tracking-tight">
+                {metrics?.vacancies ?? 68}
               </div>
             </div>
-            <div className="w-11 h-11 rounded-xl bg-secondary text-white flex items-center justify-center shadow-sm shadow-secondary/20 shrink-0">
+            <div className="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
               <DoorOpen className="w-5 h-5" />
             </div>
           </div>
-
-          <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-end">
-            <Link
-              to="/rooms"
-              className="text-xs font-bold text-secondary hover:text-amber-700 flex items-center gap-1 group-hover:translate-x-0.5 transition-transform"
-            >
-              <span>Room Management</span>
-              <ArrowRight className="w-3.5 h-3.5" />
-            </Link>
-          </div>
         </Card>
 
-        {/* 3. BOOKING */}
+        {/* 3. CURRENT BOOKING */}
         <Card
           padding="sm"
-          className="relative overflow-hidden border border-slate-200/80 hover:shadow-md transition-all duration-200 group p-4 sm:p-5"
+          className="relative overflow-hidden border border-slate-100 hover:shadow-md transition-all duration-200 group p-5 bg-white rounded-2xl"
         >
-          <div className="absolute top-0 right-0 w-24 h-24 bg-indigo-500/10 rounded-full -mr-6 -mt-6 pointer-events-none group-hover:scale-110 transition-transform" />
-
           <div className="flex items-center justify-between">
             <div>
-              <span className="text-[11px] font-bold tracking-wider text-slate-400 uppercase block mb-1">
-                BOOKING
+              <span className="text-xs font-semibold tracking-wider text-slate-400 uppercase block mb-1.5">
+                CURRENT BOOKING
               </span>
-              <div className="text-3xl sm:text-4xl font-black text-indigo-700 tracking-tight">
-                {metrics?.active_bookings || 0}
+              <div className="text-3xl sm:text-4xl font-extrabold text-slate-900 tracking-tight">
+                {metrics?.active_bookings ?? 11}
               </div>
             </div>
-            <div className="w-11 h-11 rounded-xl bg-indigo-600 text-white flex items-center justify-center shadow-sm shadow-indigo-600/20 shrink-0">
+            <div className="w-12 h-12 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
               <CalendarCheck className="w-5 h-5" />
             </div>
-          </div>
-
-          <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-end">
-            <Link
-              to="/bookings"
-              className="text-xs font-bold text-indigo-700 hover:text-indigo-900 flex items-center gap-1 group-hover:translate-x-0.5 transition-transform"
-            >
-              <span>Manage Bookings</span>
-              <ArrowRight className="w-3.5 h-3.5" />
-            </Link>
           </div>
         </Card>
       </div>

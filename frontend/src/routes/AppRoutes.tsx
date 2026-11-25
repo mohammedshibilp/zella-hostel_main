@@ -60,21 +60,16 @@ export const AppRoutes: React.FC = () => {
         <Route path="enquiries" element={<EnquiriesPage />} />
         <Route path="admissions" element={<AdmissionsPage />} />
         <Route path="guests" element={<GuestsPage />} />
+        <Route path="rent-list" element={<GuestsPage />} />
         <Route path="bookings" element={<BookingsPage />} />
         <Route path="rooms" element={<RoomsPage />} />
         <Route path="attendance" element={<AttendancePage />} />
         <Route path="fee-receipts" element={<FeeReceiptsPage />} />
+        <Route path="receipt" element={<FeeReceiptsPage />} />
         <Route path="accounts" element={<AccountsPage />} />
         <Route path="others" element={<OthersPage />} />
         <Route path="reports" element={<ReportsPage />} />
-        <Route
-          path="settings"
-          element={
-            <ProtectedRoute adminOnly>
-              <SettingsPage />
-            </ProtectedRoute>
-          }
-        />
+        <Route path="settings" element={<SettingsPage />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/dashboard" replace />} />

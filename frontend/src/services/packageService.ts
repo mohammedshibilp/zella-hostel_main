@@ -18,4 +18,8 @@ export const packageService = {
     const response = await api.put(`/packages/${id}`, data);
     return response.data;
   },
+
+  async deletePackage(id: number): Promise<void> {
+    await api.delete(`/packages/${id}`);
+  },
 };
