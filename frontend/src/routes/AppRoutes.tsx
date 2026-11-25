@@ -13,7 +13,6 @@ import { AttendancePage } from '../pages/Attendance/AttendancePage';
 import { FeeReceiptsPage } from '../pages/FeeReceipts/FeeReceiptsPage';
 import { AccountsPage } from '../pages/Accounts/AccountsPage';
 import { OthersPage } from '../pages/Others/OthersPage';
-import { ReportsPage } from '../pages/Reports/ReportsPage';
 import { SettingsPage } from '../pages/Settings/SettingsPage';
 import { LoadingState } from '../components/LoadingState';
 
@@ -68,7 +67,6 @@ export const AppRoutes: React.FC = () => {
         <Route path="receipt" element={<FeeReceiptsPage />} />
         <Route path="accounts" element={<AccountsPage />} />
         <Route path="others" element={<OthersPage />} />
-        <Route path="reports" element={<ReportsPage />} />
         <Route path="settings" element={<SettingsPage />} />
       </Route>
 

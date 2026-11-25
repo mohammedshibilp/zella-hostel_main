@@ -3,13 +3,11 @@ import { Link } from 'react-router-dom';
 import { dashboardService } from '../../services/dashboardService';
 import { DashboardMetrics } from '../../types';
 import { Card } from '../../components/Card';
-import { PageHeader } from '../../components/PageHeader';
 import { LoadingState } from '../../components/LoadingState';
 import {
   Users,
   DoorOpen,
   CalendarCheck,
-  ArrowRight,
   UserPlus,
   Receipt,
   CheckSquare,

@@ -17,9 +17,7 @@ from app.api.bookings import router as bookings_router
 from app.api.attendance import router as attendance_router
 from app.api.fee_receipts import router as fee_receipts_router
 from app.api.accounts import router as accounts_router
-from app.api.settings import router as settings_router
 from app.api.reports import router as reports_router
-from app.api.notifications import router as notifications_router
 
 
 @asynccontextmanager
@@ -74,6 +72,4 @@ app.include_router(bookings_router, prefix=v1)
 app.include_router(attendance_router, prefix=v1)
 app.include_router(fee_receipts_router, prefix=v1)
 app.include_router(accounts_router, prefix=v1)
-app.include_router(settings_router, prefix=v1)
 app.include_router(reports_router, prefix=v1)
-app.include_router(notifications_router, prefix=v1)
