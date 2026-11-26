@@ -1,4 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
+import { toPng } from 'html-to-image';
 import { feeReceiptService } from '../../services/feeReceiptService';
 import { guestService } from '../../services/guestService';
 import { FeeReceipt, Guest } from '../../types';
@@ -21,6 +24,7 @@ import {
   Plus,
   Receipt,
   Printer,
+  Download,
   Building2,
   Calendar,
   CreditCard,
@@ -35,7 +39,14 @@ import {
   Sliders,
   X,
   Save,
+  Loader2,
 } from 'lucide-react';
+
+const WhatsAppSvg: React.FC<{ className?: string }> = ({ className = 'w-4 h-4' }) => (
+  <svg className={className} viewBox="0 0 24 24" fill="currentColor">
+    <path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91C2.13 13.66 2.59 15.36 3.45 16.86L2.05 22L7.3 20.62C8.75 21.41 10.38 21.83 12.04 21.83C17.5 21.83 21.95 17.38 21.95 11.92C21.95 9.27 20.92 6.78 19.05 4.91C17.18 3.04 14.69 2 12.04 2M12.05 3.67C14.25 3.67 16.31 4.53 17.87 6.09C19.42 7.65 20.28 9.72 20.28 11.92C20.28 16.46 16.58 20.15 12.04 20.15C10.56 20.15 9.11 19.76 7.85 19L7.55 18.83L4.43 19.65L5.26 16.61L5.06 16.29C4.24 14.99 3.81 13.47 3.81 11.91C3.81 7.37 7.5 3.67 12.05 3.67M9.11 7.44C8.94 7.44 8.68 7.5 8.46 7.74C8.24 7.98 7.63 8.55 7.63 9.71C7.63 10.87 8.48 11.99 8.6 12.15C8.72 12.31 10.23 14.78 12.62 15.71C14.61 16.48 15.01 16.33 15.45 16.29C15.89 16.25 16.86 15.71 17.06 15.15C17.26 14.59 17.26 14.11 17.2 14.01C17.14 13.91 16.98 13.85 16.72 13.72C16.46 13.59 15.22 12.98 14.99 12.9C14.76 12.82 14.59 12.78 14.43 13.02C14.26 13.26 13.78 13.85 13.63 14.01C13.49 14.17 13.34 14.2 13.08 14.07C12.82 13.94 11.99 13.67 11 12.79C10.23 12.1 9.71 11.25 9.56 10.99C9.41 10.73 9.54 10.59 9.67 10.46C9.79 10.34 9.94 10.15 10.07 10C10.2 9.85 10.25 9.74 10.33 9.57C10.41 9.41 10.37 9.27 10.31 9.15C10.25 9.03 9.75 7.82 9.55 7.32C9.35 6.84 9.14 6.91 8.98 6.91C8.83 6.91 8.68 6.91 8.53 6.91L9.11 7.44Z" />
+  </svg>
+);
 
 export const FeeReceiptsPage: React.FC = () => {
   const [receipts, setReceipts] = useState<FeeReceipt[]>([]);
@@ -46,6 +57,7 @@ export const FeeReceiptsPage: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [isEditorOpen, setIsEditorOpen] = useState<boolean>(false);
   const [isSavingReceipt, setIsSavingReceipt] = useState<boolean>(false);
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState<boolean>(false);
 
   const [receiptEditState, setReceiptEditState] = useState({
     guestName: '',
@@ -325,6 +337,128 @@ export const FeeReceiptsPage: React.FC = () => {
     }
   };
 
+  const generateReceiptPdf = async (): Promise<{ pdf: jsPDF; blob: Blob; filename: string }> => {
+    const printEl = document.getElementById('printable-receipt');
+    if (!printEl) throw new Error('Receipt element not found');
+
+    let imgData: string;
+    try {
+      if (document.fonts?.ready) {
+        await document.fonts.ready;
+      }
+      // Native browser high-DPI rendering preserving exact Montserrat metrics and crisp table borders
+      imgData = await toPng(printEl, {
+        quality: 1.0,
+        pixelRatio: 3,
+        backgroundColor: '#ffffff',
+        cacheBust: false,
+      });
+    } catch (err) {
+      console.warn('toPng fallback to html2canvas:', err);
+      const canvas = await html2canvas(printEl, {
+        scale: 3,
+        useCORS: true,
+        logging: false,
+        backgroundColor: '#ffffff',
+        scrollX: 0,
+        scrollY: 0,
+      });
+      imgData = canvas.toDataURL('image/png', 1.0);
+    }
+
+    const recNum = receiptEditState.receiptNo || selectedReceipt?.receipt_no || 'Receipt';
+    const filename = `Receipt_${recNum}.pdf`;
+
+    // Authentic single-page A4 document: 210mm x 297mm
+    const pdf = new jsPDF({
+      orientation: 'portrait',
+      unit: 'mm',
+      format: 'a4',
+    });
+
+    // 210mm x 297mm exact full bleed placement
+    pdf.addImage(imgData, 'PNG', 0, 0, 210, 297, undefined, 'FAST');
+    const blob = pdf.output('blob');
+    return { pdf, blob, filename };
+  };
+
+  const handleDownloadPdf = async () => {
+    if (!selectedReceipt) return;
+    try {
+      setIsGeneratingPdf(true);
+      const { pdf, filename } = await generateReceiptPdf();
+      pdf.save(filename);
+      success(`Receipt PDF (${filename}) downloaded successfully!`, 'Downloaded');
+    } catch (err: any) {
+      console.error('PDF download error:', err);
+      toastError('Failed to generate PDF receipt. You can try Print Receipt instead.');
+    } finally {
+      setIsGeneratingPdf(false);
+    }
+  };
+
+  const handleShareWhatsApp = async () => {
+    if (!selectedReceipt) return;
+    try {
+      setIsGeneratingPdf(true);
+      const { pdf, blob, filename } = await generateReceiptPdf();
+
+      const rawPhone = selectedReceipt.guest?.contact_no || selectedReceipt.guest?.guardian_phone || '';
+      const cleanPhone = rawPhone.replace(/\D/g, '');
+      const phoneWithCountry = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
+
+      const recNum = receiptEditState.receiptNo || selectedReceipt.receipt_no || '';
+      const guestName = receiptEditState.guestName || selectedReceipt.guest?.name || 'Guest';
+      const amt = receiptEditState.amount || (selectedReceipt.paid_amount ?? selectedReceipt.amount ?? 0).toLocaleString('en-IN');
+      const desc = receiptEditState.description || selectedReceipt.fee_type || 'Hostel Accommodation Fee';
+      const dateStr = receiptEditState.receiptDate || selectedReceipt.date || '';
+
+      const pdfFile = new File([blob], filename, { type: 'application/pdf' });
+
+      // 1. Mobile Web Share API with files support
+      if (navigator.canShare && navigator.canShare({ files: [pdfFile] })) {
+        await navigator.share({
+          files: [pdfFile],
+          title: `Receipt ${recNum} - ${guestName}`,
+          text: `*ZELLA LADIES HOSTEL*\nOfficial Payment Receipt: *${recNum}*\nResident: *${guestName}*\nAmount: *₹${amt}*\nDescription: *${desc}*`,
+        });
+        success('Receipt PDF shared successfully!', 'Shared');
+        return;
+      }
+
+      // 2. Desktop fallback: Download exact A4 PDF and open WhatsApp chat
+      pdf.save(filename);
+
+      const messageText = encodeURIComponent(
+        `*ZELLA LADIES HOSTEL*\n` +
+        `*Official Payment Receipt: ${recNum}*\n\n` +
+        `Dear *${guestName}*,\n` +
+        `Here is your official payment receipt for *${desc}*.\n\n` +
+        `• *Receipt No:* ${recNum}\n` +
+        `• *Amount Paid:* ₹${amt}\n` +
+        `• *Date:* ${dateStr}\n` +
+        `• *Payment Mode:* ${receiptEditState.paymentMode}\n\n` +
+        `The exact A4 receipt PDF (${filename}) has been downloaded to your device.\n` +
+        `Thank you for staying at Zella Ladies Hostel!`
+      );
+
+      const waUrl = phoneWithCountry
+        ? `https://wa.me/${phoneWithCountry}?text=${messageText}`
+        : `https://wa.me/?text=${messageText}`;
+
+      window.open(waUrl, '_blank');
+      success(`Receipt PDF downloaded! Please attach ${filename} in WhatsApp chat.`, 'WhatsApp PDF Ready');
+    } catch (err: any) {
+      if (err.name === 'AbortError') {
+        return;
+      }
+      console.error('WhatsApp share error:', err);
+      toastError('Failed to share PDF. You can use "Download PDF" instead.');
+    } finally {
+      setIsGeneratingPdf(false);
+    }
+  };
+
   const handlePrint = () => {
     const printEl = document.getElementById('printable-receipt');
     if (!printEl) {
@@ -376,22 +510,12 @@ export const FeeReceiptsPage: React.FC = () => {
               -webkit-print-color-adjust: exact !important;
               print-color-adjust: exact !important;
             }
-            .a4-print-canvas {
-              width: 210mm;
-              height: 297mm;
-              max-height: 297mm;
-              margin: 0 auto;
-              box-sizing: border-box;
-              display: flex;
-              justify-content: center;
-              align-items: flex-start;
-              padding-top: 10mm;
-              page-break-inside: avoid !important;
-              page-break-after: avoid !important;
-              page-break-before: avoid !important;
-              overflow: hidden !important;
-            }
             #printable-receipt {
+              width: 210mm !important;
+              height: 297mm !important;
+              min-height: 297mm !important;
+              max-height: 297mm !important;
+              margin: 0 !important;
               box-shadow: none !important;
               border: none !important;
               page-break-inside: avoid !important;
@@ -402,9 +526,7 @@ export const FeeReceiptsPage: React.FC = () => {
           </style>
         </head>
         <body>
-          <div class="a4-print-canvas">
-            ${printEl.outerHTML}
-          </div>
+          ${printEl.outerHTML}
         </body>
       </html>
     `);
@@ -994,279 +1116,311 @@ export const FeeReceiptsPage: React.FC = () => {
 
               {/* Scrollable Container for Mobile Responsiveness */}
               <div className="w-full overflow-x-auto bg-slate-100/70 p-2 sm:p-6 rounded-xl border border-slate-200/80 flex justify-center">
-                {/* Printable Receipt Canvas Matching Reference PDF Exactly (516.64pt x 568.11pt = 688px x 756px) */}
-                <div
-                  id="printable-receipt"
-                  ref={receiptPrintRef}
-                  className="bg-white border border-slate-200 shadow-sm text-slate-900 text-left font-sans shrink-0 select-text flex flex-col justify-between"
-                  style={{
-                    width: '688px',
-                    minWidth: '688px',
-                    maxWidth: '688px',
-                    height: '756px',
-                    minHeight: '756px',
-                    maxHeight: '756px',
-                    boxSizing: 'border-box',
-                    backgroundColor: '#ffffff',
-                    fontFamily:
-                      'Montserrat, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
-                    overflow: 'hidden',
-                    position: 'relative',
-                  }}
-                >
-                  {/* Top & Main Content Container with Exact Model Margins */}
-                  <div style={{ padding: '34px 44px 0px 44px' }}>
-                    {/* 1. TOP HEADER */}
-                    <div className="flex justify-between items-start gap-4">
-                      {/* Left: Official Logo & ISO Certification Badge */}
-                      <div className="flex flex-col items-start">
-                        <img
-                          src={zellaLogo}
-                          alt="Zella Ladies Hostel"
-                          className="h-[46px] w-auto object-contain object-left mb-1"
-                        />
-                        <div className="inline-block bg-[#0B1A42] text-white text-[8px] font-bold tracking-wider px-2 py-0.5 rounded-xs uppercase">
-                          An ISO 9001 - 2015 Certified Hostel
+                {/* Visual card wrapper for screen preview */}
+                <div className="bg-white border border-slate-300 shadow-xl overflow-hidden shrink-0" style={{ width: '794px' }}>
+                  {/* Printable Receipt Canvas Matching Exact A4 Dimensions: 210mm x 297mm (794px x 1123px) */}
+                  <div
+                    id="printable-receipt"
+                    ref={receiptPrintRef}
+                    className="bg-white text-slate-900 text-left select-text flex flex-col justify-between"
+                    style={{
+                      width: '794px',
+                      minWidth: '794px',
+                      maxWidth: '794px',
+                      height: '1123px',
+                      minHeight: '1123px',
+                      maxHeight: '1123px',
+                      boxSizing: 'border-box',
+                      backgroundColor: '#ffffff',
+                      fontFamily: "'Montserrat', sans-serif",
+                      overflow: 'hidden',
+                      position: 'relative',
+                    }}
+                  >
+                    {/* Top & Main Content Container with Exact Proportional Margins */}
+                    <div style={{ padding: '56px 68px 0px 68px' }}>
+                      {/* 1. TOP HEADER */}
+                      <div className="flex justify-between items-start gap-4">
+                        {/* Left: Official Logo & ISO Certification Badge */}
+                        <div className="flex flex-col items-start">
+                          <img
+                            src={zellaLogo}
+                            alt="Zella Ladies Hostel"
+                            className="h-[56px] w-auto object-contain object-left mb-1.5"
+                          />
+                          <div
+                            style={{
+                              backgroundColor: '#0B1A42',
+                              color: '#ffffff',
+                              fontSize: '10px',
+                              fontWeight: 700,
+                              letterSpacing: '0.08em',
+                              padding: '3px 10px',
+                              borderRadius: '1px',
+                              textTransform: 'uppercase',
+                              display: 'inline-block',
+                            }}
+                          >
+                            An ISO 9001 - 2015 Certified Hostel
+                          </div>
+                        </div>
+
+                        {/* Right: Contact Information */}
+                        <div className="flex flex-col items-start gap-1 text-[13px] text-slate-800">
+                          <div className="flex items-center gap-2">
+                            <MapPin className="w-4 h-4 text-slate-800 shrink-0" />
+                            <span className="font-medium">Opp. Bharat Petroleum, Kottakkal</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Mail className="w-4 h-4 text-slate-800 shrink-0" />
+                            <span className="font-medium">zellahostel@gmail.com</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Phone className="w-4 h-4 text-slate-800 shrink-0" />
+                            <span className="font-bold text-slate-900">9645 7000 27 | 9645 7000 28</span>
+                          </div>
                         </div>
                       </div>
 
-                      {/* Right: Contact Information */}
-                      <div className="flex flex-col items-start gap-1 text-[10.5px] text-slate-800">
-                        <div className="flex items-center gap-1.5">
-                          <MapPin className="w-3.5 h-3.5 text-slate-800 shrink-0" />
-                          <span className="font-medium">Opp. Bharat Petroleum, Kottakkal</span>
+                      {/* 2. TITLE & RECEIVED FROM METADATA */}
+                      <div className="mt-11 flex justify-between items-start gap-4">
+                        {/* Left: RECEIVED FROM & Red-highlighted Dynamic Fields */}
+                        <div>
+                          <div className="text-[12.5px] font-bold text-slate-600 tracking-wider uppercase mb-0.5">
+                            RECEIVED FROM
+                          </div>
+                          <div
+                            className="text-[16px] font-extrabold uppercase tracking-wide leading-tight"
+                            style={{ color: receiptEditState.redAccent ? '#C53030' : '#1E293B' }}
+                          >
+                            {receiptEditState.guestName}
+                          </div>
+                          <div
+                            className="text-[13.5px] font-bold uppercase tracking-wide mt-1"
+                            style={{ color: receiptEditState.redAccent ? '#C53030' : '#1E293B' }}
+                          >
+                            {receiptEditState.roomNo}
+                          </div>
                         </div>
-                        <div className="flex items-center gap-1.5">
-                          <Mail className="w-3.5 h-3.5 text-slate-800 shrink-0" />
-                          <span className="font-medium">zellahostel@gmail.com</span>
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                          <Phone className="w-3.5 h-3.5 text-slate-800 shrink-0" />
-                          <span className="font-bold text-slate-900">9645 7000 27 | 9645 7000 28</span>
+
+                        {/* Right: Proof of Payment & Receipt Details */}
+                        <div className="text-right shrink-0">
+                          <div className="text-[28px] font-extrabold text-[#2D3748] tracking-tight leading-none mb-2">
+                            Proof of Payment
+                          </div>
+                          <div className="text-[13.5px] font-semibold text-slate-800">
+                            <span className="font-bold text-slate-900">No. : </span>
+                            {receiptEditState.receiptNo}
+                          </div>
+                          <div className="text-[13.5px] font-semibold text-slate-800 mt-1">
+                            <span className="font-bold text-slate-900">Date : </span>
+                            {receiptEditState.receiptDate}
+                          </div>
                         </div>
                       </div>
-                    </div>
 
-                    {/* 2. TITLE & RECEIVED FROM METADATA */}
-                    <div className="mt-5 flex justify-between items-start gap-4">
-                      {/* Left: RECEIVED FROM & Red-highlighted Dynamic Fields */}
+                      {/* 3. MAIN PAYMENT TABLE (DESCRIPTION | AMOUNT) */}
+                      <table style={{ width: '100%', borderCollapse: 'collapse', borderTop: '1.8px solid #0f172a', borderBottom: '1.8px solid #0f172a', marginTop: '36px' }}>
+                        <thead>
+                          <tr style={{ borderBottom: '1.5px solid #0f172a', height: '32px' }}>
+                            <th style={{ padding: '4px 12px', textAlign: 'left', borderRight: '1.5px solid #0f172a', width: '76.7%', fontSize: '12.5px', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.06em', color: '#0f172a' }}>
+                              DESCRIPTION
+                            </th>
+                            <th style={{ padding: '4px 12px', textAlign: 'right', width: '23.3%', fontSize: '12.5px', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.06em', color: '#0f172a' }}>
+                              AMOUNT
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr style={{ height: '64px' }}>
+                            <td style={{ padding: '16px 12px', textAlign: 'left', borderRight: '1.5px solid #0f172a', verticalAlign: 'middle' }}>
+                              <span
+                                className="text-[15.5px] font-bold"
+                                style={{ color: receiptEditState.redAccent ? '#C53030' : '#1E293B' }}
+                              >
+                                {receiptEditState.description}
+                              </span>
+                            </td>
+                            <td style={{ padding: '16px 12px', textAlign: 'right', verticalAlign: 'middle' }}>
+                              <span
+                                className="text-[15.5px] font-bold"
+                                style={{ color: receiptEditState.redAccent ? '#C53030' : '#1E293B' }}
+                              >
+                                ₹{receiptEditState.amount}
+                              </span>
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+
+                      {/* 4. MODE OF PAYMENT & TRANSACTION DATE */}
+                      <div className="mt-5 flex flex-wrap justify-between items-center gap-2 text-[12.5px]">
+                        <div className="flex items-center gap-4">
+                          <span className="font-extrabold text-slate-900 tracking-wider uppercase">
+                            MODE OF PAYMENT
+                          </span>
+                          <span className="inline-flex items-center gap-2 font-bold text-slate-900">
+                            <span style={{ display: 'inline-block', width: '14px', height: '14px', border: '1.5px solid #0f172a', verticalAlign: 'middle', position: 'relative', backgroundColor: '#ffffff' }}>
+                              {isUpiOrBank && <span style={{ position: 'absolute', top: '2px', left: '2px', width: '7px', height: '7px', backgroundColor: '#0f172a' }} />}
+                            </span>
+                            <span>UPI / BANK</span>
+                          </span>
+                          <span className="inline-flex items-center gap-2 font-bold text-slate-900 ml-2">
+                            <span style={{ display: 'inline-block', width: '14px', height: '14px', border: '1.5px solid #0f172a', verticalAlign: 'middle', position: 'relative', backgroundColor: '#ffffff' }}>
+                              {isCash && <span style={{ position: 'absolute', top: '2px', left: '2px', width: '7px', height: '7px', backgroundColor: '#0f172a' }} />}
+                            </span>
+                            <span>CASH</span>
+                          </span>
+                        </div>
+                        <div className="font-extrabold text-slate-900 tracking-wider uppercase">
+                          TRANSACTION DATE &nbsp; {receiptEditState.transactionDate}
+                        </div>
+                      </div>
+
+                      {/* Computer-generated payment notice matching reference */}
+                      <div className="text-[10.5px] text-slate-500 font-medium text-right mt-2.5">
+                        **This is computer generated payment proof, no signature required
+                      </div>
+                      {/* Divider under payment notice */}
+                      <div style={{ borderBottom: '1.2px solid #CBD5E1', marginTop: '12px', marginBottom: '26px' }} />
+
+                      {/* 5. REFUND POLICY */}
+                      <div className="mb-6">
+                        <div
+                          className="text-[13px] font-extrabold tracking-wider uppercase mb-1.5"
+                          style={{ color: '#C53030' }}
+                        >
+                          {receiptEditState.refundPolicyTitle}
+                        </div>
+                        <p className="text-[11.5px] text-slate-700 leading-relaxed font-normal whitespace-pre-line">
+                          {receiptEditState.refundPolicyText}
+                        </p>
+                      </div>
+
+                      {/* 6. FEE STRUCTURE SECTION */}
                       <div>
-                        <div className="text-[11px] font-bold text-slate-700 tracking-wider uppercase mb-0.5">
-                          RECEIVED FROM
-                        </div>
                         <div
-                          className="text-[13px] font-extrabold uppercase tracking-wide leading-tight"
-                          style={{ color: receiptEditState.redAccent ? '#C53030' : '#1E293B' }}
+                          className="text-[13px] font-extrabold tracking-wider uppercase mb-2"
+                          style={{ color: '#C53030' }}
                         >
-                          {receiptEditState.guestName}
-                        </div>
-                        <div
-                          className="text-[11px] font-bold uppercase tracking-wide mt-0.5"
-                          style={{ color: receiptEditState.redAccent ? '#C53030' : '#1E293B' }}
-                        >
-                          {receiptEditState.roomNo}
-                        </div>
-                      </div>
-
-                      {/* Right: Proof of Payment & Receipt Details */}
-                      <div className="text-right shrink-0">
-                        <div className="text-[23px] font-extrabold text-[#2D3748] tracking-tight leading-none mb-1.5">
-                          Proof of Payment
-                        </div>
-                        <div className="text-[11px] font-semibold text-slate-800">
-                          <span className="font-bold text-slate-900">No. : </span>
-                          {receiptEditState.receiptNo}
-                        </div>
-                        <div className="text-[11px] font-semibold text-slate-800 mt-0.5">
-                          <span className="font-bold text-slate-900">Date : </span>
-                          {receiptEditState.receiptDate}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* 3. MAIN PAYMENT TABLE (DESCRIPTION | AMOUNT) */}
-                    <div className="mt-5 w-full text-slate-900">
-                      {/* Top border line */}
-                      <div className="w-full h-[1.5px] bg-slate-900" />
-
-                      {/* Header Row */}
-                      <div className="flex h-[26px]">
-                        <div className="px-2.5 font-extrabold uppercase tracking-wider text-left border-r border-slate-900 w-[76.7%] text-[11px] flex items-center">
-                          DESCRIPTION
-                        </div>
-                        <div className="px-2.5 font-extrabold uppercase tracking-wider text-right w-[23.3%] text-[11px] flex items-center justify-end">
-                          AMOUNT
-                        </div>
-                      </div>
-
-                      {/* Middle separator line */}
-                      <div className="w-full h-[1px] bg-slate-900" />
-
-                      {/* Content Row - items-stretch ensures vertical divider reaches bottom line */}
-                      <div className="flex min-h-[46px] items-stretch">
-                        <div className="py-2.5 px-2.5 border-r border-slate-900 w-[76.7%] flex items-center">
-                          <span
-                            className="text-[13.5px] font-bold"
-                            style={{ color: receiptEditState.redAccent ? '#C53030' : '#1E293B' }}
-                          >
-                            {receiptEditState.description}
-                          </span>
-                        </div>
-                        <div className="py-2.5 px-2.5 text-right w-[23.3%] flex items-center justify-end">
-                          <span
-                            className="text-[13.5px] font-bold"
-                            style={{ color: receiptEditState.redAccent ? '#C53030' : '#1E293B' }}
-                          >
-                            ₹{receiptEditState.amount}
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Bottom border line */}
-                      <div className="w-full h-[1.5px] bg-slate-900" />
-                    </div>
-
-                    {/* 4. MODE OF PAYMENT & TRANSACTION DATE */}
-                    <div className="mt-3.5 flex flex-wrap justify-between items-center gap-2 text-[10.5px]">
-                      <div className="flex items-center gap-3">
-                        <span className="font-extrabold text-slate-900 tracking-wider uppercase">
-                          MODE OF PAYMENT
-                        </span>
-                        <span className="inline-flex items-center gap-1.5 font-bold text-slate-900">
-                          <span className="w-3.5 h-3.5 border border-slate-700 rounded-none inline-flex items-center justify-center p-[2px] bg-white">
-                            {isUpiOrBank && <span className="w-1.5 h-1.5 bg-slate-900 block" />}
-                          </span>
-                          <span>UPI / BANK</span>
-                        </span>
-                        <span className="inline-flex items-center gap-1.5 font-bold text-slate-900 ml-2">
-                          <span className="w-3.5 h-3.5 border border-slate-700 rounded-none inline-flex items-center justify-center p-[2px] bg-white">
-                            {isCash && <span className="w-1.5 h-1.5 bg-slate-900 block" />}
-                          </span>
-                          <span>CASH</span>
-                        </span>
-                      </div>
-                      <div className="font-extrabold text-slate-900 tracking-wider uppercase">
-                        TRANSACTION DATE &nbsp; {receiptEditState.transactionDate}
-                      </div>
-                    </div>
-
-                    {/* Computer-generated payment notice matching reference */}
-                    <div className="text-[9.5px] text-slate-500 font-medium text-right mt-1.5">
-                      **This is computer generated payment proof, no signature required
-                    </div>
-                    {/* Divider 1 under payment notice */}
-                    <div className="border-b border-slate-300 mt-2 mb-3" />
-
-                    {/* 5. REFUND POLICY */}
-                    <div className="mb-3">
-                      <div
-                        className="text-[11px] font-extrabold tracking-wider uppercase mb-1"
-                        style={{ color: '#C53030' }}
-                      >
-                        {receiptEditState.refundPolicyTitle}
-                      </div>
-                      <p className="text-[9.5px] text-slate-700 leading-snug font-normal whitespace-pre-line">
-                        {receiptEditState.refundPolicyText}
-                      </p>
-                    </div>
-
-                    {/* 6. FEE STRUCTURE SECTION */}
-                    <div>
-                      <div
-                        className="text-[11px] font-extrabold tracking-wider uppercase mb-1.5"
-                        style={{ color: '#C53030' }}
-                      >
-                        {receiptEditState.feeStructureTitle}
-                      </div>
-
-                      <div className="flex flex-col sm:flex-row justify-between items-start gap-4">
-                        {/* Left: Fee Structure Rates Table with discrete block lines (NO strikethrough bugs) */}
-                        <div className="w-[245px] text-[9.5px] text-left">
-                          {/* Top Border Line */}
-                          <div className="w-full h-[1px] bg-slate-900" />
-
-                          {/* Header */}
-                          <div className="flex h-[20px] items-center text-slate-900 font-bold">
-                            <div className="px-2 w-[54%] border-r border-slate-900 leading-none">DURATION</div>
-                            <div className="px-2 w-[46%] leading-none">PRICE</div>
-                          </div>
-
-                          {/* Header Divider Line */}
-                          <div className="w-full h-[1px] bg-slate-900" />
-
-                          {/* Rows */}
-                          <div className="flex h-[18px] items-center text-slate-800 font-medium">
-                            <div className="px-2 w-[54%] border-r border-slate-900 leading-none">1 DAY</div>
-                            <div className="px-2 w-[46%] font-semibold text-slate-900 leading-none">₹ 500/-</div>
-                          </div>
-                          <div className="flex h-[18px] items-center text-slate-800 font-medium">
-                            <div className="px-2 w-[54%] border-r border-slate-900 leading-none">2 TO 5 DAYS</div>
-                            <div className="px-2 w-[46%] font-semibold text-slate-900 leading-none">₹ 350/- Per Day</div>
-                          </div>
-                          <div className="flex h-[18px] items-center text-slate-800 font-medium">
-                            <div className="px-2 w-[54%] border-r border-slate-900 leading-none">5 TO 10 DAYS</div>
-                            <div className="px-2 w-[46%] font-semibold text-slate-900 leading-none">₹ 2500/-</div>
-                          </div>
-                          <div className="flex h-[18px] items-center text-slate-800 font-medium">
-                            <div className="px-2 w-[54%] border-r border-slate-900 leading-none">10 TO 15 DAYS</div>
-                            <div className="px-2 w-[46%] font-semibold text-slate-900 leading-none">₹ 3500/-</div>
-                          </div>
-                          <div className="flex h-[18px] items-center text-slate-800 font-medium">
-                            <div className="px-2 w-[54%] border-r border-slate-900 leading-none">15 TO 20 DAYS</div>
-                            <div className="px-2 w-[46%] font-semibold text-slate-900 leading-none">₹ 4500/-</div>
-                          </div>
-
-                          {/* Bottom Border Line */}
-                          <div className="w-full h-[1px] bg-slate-900" />
+                          {receiptEditState.feeStructureTitle}
                         </div>
 
-                        {/* Right: Optional Official Seal & Signature (when toggled on by admin) */}
-                        {receiptEditState.showSealAndSignature && (
-                          <div className="w-full sm:w-[45%] flex items-end justify-between pt-1 self-stretch">
-                            <div className="flex flex-col items-center">
-                              <ZellaHostelSeal className="w-16 h-16" />
-                            </div>
-                            <div className="text-right">
-                              <div className="text-[10px] font-bold uppercase tracking-wider text-slate-900">
-                                AUTHORIZED SIGNATORY
+                        <div className="flex flex-col sm:flex-row justify-between items-start gap-4">
+                          {/* Left: Fee Structure Rates Table */}
+                          <table style={{ width: '320px', borderCollapse: 'collapse', fontSize: '11px', textAlign: 'left', borderTop: '1.8px solid #0f172a', borderBottom: '1.8px solid #0f172a' }}>
+                            <thead>
+                              <tr style={{ borderBottom: '1.5px solid #0f172a', height: '26px', color: '#0f172a' }}>
+                                <th style={{ padding: '3px 10px', borderRight: '1.5px solid #0f172a', width: '53%', fontWeight: '800' }}>DURATION</th>
+                                <th style={{ padding: '3px 10px', width: '47%', fontWeight: '800' }}>PRICE</th>
+                              </tr>
+                            </thead>
+                            <tbody style={{ color: '#1e293b' }}>
+                              <tr style={{ height: '24px' }}>
+                                <td style={{ padding: '3px 10px', borderRight: '1.5px solid #0f172a', fontWeight: '500' }}>1 DAY</td>
+                                <td style={{ padding: '3px 10px', fontWeight: '700', color: '#0f172a' }}>₹ 500/-</td>
+                              </tr>
+                              <tr style={{ height: '24px' }}>
+                                <td style={{ padding: '3px 10px', borderRight: '1.5px solid #0f172a', fontWeight: '500' }}>2 TO 5 DAYS</td>
+                                <td style={{ padding: '3px 10px', fontWeight: '700', color: '#0f172a' }}>₹ 350/- Per Day</td>
+                              </tr>
+                              <tr style={{ height: '24px' }}>
+                                <td style={{ padding: '3px 10px', borderRight: '1.5px solid #0f172a', fontWeight: '500' }}>5 TO 10 DAYS</td>
+                                <td style={{ padding: '3px 10px', fontWeight: '700', color: '#0f172a' }}>₹ 2500/-</td>
+                              </tr>
+                              <tr style={{ height: '24px' }}>
+                                <td style={{ padding: '3px 10px', borderRight: '1.5px solid #0f172a', fontWeight: '500' }}>10 TO 15 DAYS</td>
+                                <td style={{ padding: '3px 10px', fontWeight: '700', color: '#0f172a' }}>₹ 3500/-</td>
+                              </tr>
+                              <tr style={{ height: '24px' }}>
+                                <td style={{ padding: '3px 10px', borderRight: '1.5px solid #0f172a', fontWeight: '500' }}>15 TO 20 DAYS</td>
+                                <td style={{ padding: '3px 10px', fontWeight: '700', color: '#0f172a' }}>₹ 4500/-</td>
+                              </tr>
+                            </tbody>
+                          </table>
+
+                          {/* Right: Optional Official Seal & Signature (when toggled on by admin) */}
+                          {receiptEditState.showSealAndSignature && (
+                            <div className="w-full sm:w-[45%] flex items-end justify-between pt-1 self-stretch">
+                              <div className="flex flex-col items-center">
+                                <ZellaHostelSeal className="w-16 h-16" />
                               </div>
-                              <div className="text-[9px] font-semibold text-slate-700 mt-0.5">
-                                Zella Ladies Hostel Administration
+                              <div className="text-right">
+                                <div className="text-[11px] font-bold uppercase tracking-wider text-slate-900">
+                                  AUTHORIZED SIGNATORY
+                                </div>
+                                <div className="text-[10px] font-semibold text-slate-700 mt-0.5">
+                                  Zella Ladies Hostel Administration
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        )}
-                      </div>
+                          )}
+                        </div>
 
-                      {/* Package Types & Food inclusion notice matching reference */}
-                      <div className="mt-2.5 text-[10px] leading-tight">
-                        <div className="font-extrabold text-slate-900 uppercase tracking-wide">
-                          WE OFFER 20 TO 30 DAY PACKAGES IN TWO TYPES
-                        </div>
-                        <div className="font-bold text-slate-900 mt-0.5">
-                          ₹ 5000/- (Upper Bed) &nbsp; | &nbsp; ₹ 5500/- (Bottom Bed)
-                        </div>
-                        <div className="font-extrabold text-[#D81B60] uppercase tracking-wide mt-0.5">
-                          ALL PACKAGES INCLUDE FOUR TIMES FOOD A DAY
+                        {/* Package Types & Food inclusion notice matching reference */}
+                        <div className="mt-4 text-[12px] leading-snug">
+                          <div className="font-extrabold text-slate-900 uppercase tracking-wide">
+                            WE OFFER 20 TO 30 DAY PACKAGES IN TWO TYPES
+                          </div>
+                          <div className="font-bold text-slate-900 mt-1">
+                            ₹ 5000/- (Upper Bed) &nbsp; | &nbsp; ₹ 5500/- (Bottom Bed)
+                          </div>
+                          <div className="font-extrabold text-[#D81B60] uppercase tracking-wide mt-1">
+                            ALL PACKAGES INCLUDE FOUR TIMES FOOD A DAY
+                          </div>
                         </div>
                       </div>
+                    </div>
+
+                    {/* 7. EXACT TWO-TIER FOOTER: PINK STRIP + NAVY BOTTOM FOOTER ACROSS FULL WIDTH */}
+                    <div className="w-full shrink-0 flex flex-col m-0 p-0">
+                      {/* Top Pink Horizontal Strip */}
+                      <div
+                        style={{
+                          width: '100%',
+                          height: '8px',
+                          backgroundColor: '#D81B60',
+                        }}
+                      />
+                      {/* Navy Bottom Footer */}
+                      <div
+                        style={{
+                          width: '100%',
+                          height: '42px',
+                          backgroundColor: '#0B1A42',
+                        }}
+                      />
                     </div>
                   </div>
-
-                  {/* 7. BOTTOM ACCENT BAR - EXACT FULL BLEED AT VERY BOTTOM */}
-                  <div
-                    className="w-full shrink-0"
-                    style={{
-                      height: '26px',
-                      backgroundColor: '#D81B60',
-                      margin: 0,
-                    }}
-                  />
                 </div>
               </div>
 
               {/* Bottom Modal Actions */}
               <div className="flex flex-col-reverse sm:flex-row flex-wrap items-stretch sm:items-center justify-end gap-2.5 sm:gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={handleShareWhatsApp}
+                  disabled={isGeneratingPdf}
+                  className="px-4 py-2 text-sm font-bold text-white bg-[#25D366] hover:bg-[#20ba59] active:bg-[#1da850] rounded-xl flex items-center justify-center gap-2 transition-all shadow-sm shadow-[#25D366]/20 disabled:opacity-50 active:scale-[0.98]"
+                >
+                  {isGeneratingPdf ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <WhatsAppSvg className="w-4 h-4" />
+                  )}
+                  <span>Share PDF on WhatsApp</span>
+                </button>
+
+                <Button
+                  variant="outline"
+                  icon={isGeneratingPdf ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                  onClick={handleDownloadPdf}
+                  disabled={isGeneratingPdf}
+                  className="w-full sm:w-auto"
+                >
+                  Download PDF
+                </Button>
+
                 <Button
                   variant="primary"
                   icon={<Printer className="w-4 h-4" />}
